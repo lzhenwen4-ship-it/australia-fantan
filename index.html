@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>澳洲幸运8智能番摊系统</title>
+<style>
+body{margin:0;background:#f2f4f8;font-family:Arial,"Microsoft YaHei";color:#18243a}
+header{background:#142744;color:white;padding:22px 15px}
+h2{font-size:18px}
+main{padding:12px;max-width:700px;margin:auto}
+.card{background:white;border-radius:12px;padding:15px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.num{font-size:25px;font-weight:bold;color:#2463d8}
+button{border:0;background:#245bd6;color:white;padding:11px;border-radius:8px;margin:4px 0}
+textarea,input,select{box-sizing:border-box;width:100%;padding:11px;border:1px solid #ddd;border-radius:8px;margin:6px 0}
+.tag{display:inline-block;background:#edf2ff;color:#245bd6;padding:7px 10px;margin:4px;border-radius:7px}
+.small{font-size:12px;color:#777;line-height:1.7}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:9px;border-bottom:1px solid #eee;text-align:center}
+</style>
+</head>
+<body>
+<header>
+<h2>澳洲幸运8 · 广西番摊智能数据系统</h2>
+<div class="small">仅读取每期第一球，1～20分四番统计</div>
+</header>
+<main>
+
+<div class="card">
+<h3>开奖数据导入</h3>
+<textarea id="input" rows="5" placeholder="每行一期：期号,第一球号码&#10;例如：588258,17&#10;588257,03"></textarea>
+<button onclick="loadData()">导入历史数据</button>
+<button onclick="demo()">载入演示数据</button>
+<div id="status" class="small">尚未导入数据</div>
+</div>
+
+<div class="grid">
+<div class="card"><div class="small">历史期数</div><div class="num" id="total">0</div></div>
+<div class="card"><div class="small">最新第一球</div><div class="num" id="latest">—</div></div>
+</div>
+
+<div class="card">
+<h3>下一期智能推荐</h3>
+<div class="small">根据此前历史数据计算，采用近30期频率分析。</div>
+<p>主推番：<span class="num" id="mainFan">—</span></p>
+<p>次推番：<span class="num" id="secondFan">—</span></p>
+<p>防守番：<span class="num" id="safeFan">—</span></p>
+<hr>
+<p>主推角：<span class="num" id="mainJiao">—</span></p>
+<p>次推角：<span class="num" id="secondJiao">—</span></p>
+<p>防守角：<span class="num" id="safeJiao">—</span></p>
+<div id="reason" class="small"></div>
+</div>
+
+<div class="card">
+<h3>四番历史统计</h3>
+<table>
+<thead><tr><th>番</th><th>次数</th><th>比例</th><th>当前遗漏</th></tr></thead>
+<tbody id="stats"></tbody>
+</table>
+</div>
+
+<div class="card">
+<h3>历史回测</h3>
+<p class="small">使用过去30期作为分析窗口，对后续每一期进行模拟推荐，避免使用未来数据。</p>
+<button onclick="backtest()">开始回测</button>
+<div id="result">等待回测</div>
+</div>
+
+<div class="card">
+<h3>最近开奖走势</h3>
+<div id="trend"></div>
+</div>
+
+<div class="card">
+<h3>数据管理</h3>
+<button onclick="exportData()">导出数据</button>
+<button onclick="clearData()" style="background:#b43b3b">清空数据</button>
+<p class="small">数据保存在当前手机浏览器中。请定期导出备份。</p>
+</div>
+
+<div class="small">
+说明：历史统计不能保证未来开奖结果。推荐模型需要通过持续的样本外回测验证，不能将历史频率当成下一期中奖概率。
+</div>
+</main>
+
+<script>
+let data=JSON.parse(localStorage.getItem("fantanData")||"[]");
+const group=n=>(n-1)%4+1;
+function save(){
+ localStorage.setItem("fantanData",JSON.stringify(data));
+ render();
+}
+function loadData(){
+ let lines=document.getElementById("input").value.trim().split(/\n/);
+ let map=new Map(data.map(x=>[String(x.issue),x]));
+ let count=0;
+ lines.forEach((line,i)=>{
+  let a=line.trim().match(/(\d{3,})[\s,，;|]+(\d{1,2})/);
+  if(a){
+   let n=Number(a[2]);
+   if(n>=1&&n<=20){
+    map.set(a[1],{issue:a[1],num:n});
+    count++;
+   }
+  }
+ });
+ data=[...map.values()].sort((a,b)=>String(a.issue).localeCompare(String(b.issue),undefined,{numeric:true}));
+ save();
+ document.getElementById("status").textContent="成功导入或更新 "+count+" 条记录";
+}
+function scores(arr){
+ let count=[0,0,0,0,0];
+ arr.forEach(x=>count[group(x.num)]++);
+ return [1,2,3,4].map(g=>{
+  let gap=0;
+  for(let i=arr.length-1;i>=0;i--){
+   if(group(arr[i].num)===g)break;
+   gap++;
+  }
+  return {g,count:count[g],gap,rate:arr.length?count[g]/arr.length:0};
+ }).sort((a,b)=>b.rate-a.rate||a.g-b.g);
+}
+function recommend(arr){
+ return scores(arr);
+}
+function render(){
+ document.getElementById("total").textContent=data.length;
+ document.getElementById("latest").textContent=data.length?data[data.length-1].num:"—";
+ let s=scores(data.slice(-30));
+ document.getElementById("stats").innerHTML=[1,2,3,4].map(g=>{
+  let x=s.find(v=>v.g===g);
+  return `<tr><td>${g}番/角</td><td>${x.count}</td><td>${(x.rate*100).toFixed(1)}%</td><td>${x.gap}</td></tr>`;
+ }).join("");
+ if(data.length){
+  let r=recommend(data.slice(-30));
+  ["mainFan","secondFan","safeFan"].forEach((id,i)=>{
+   document.getElementById(id).textContent=r[i].g+"番";
+  });
+  ["mainJiao","secondJiao","safeJiao"].forEach((id,i)=>{
+   document.getElementById(id).textContent=r[i].g+"角";
+  });
+  document.getElementById("reason").textContent=
+   "排序依据：最近30期各番出现频率，频率相同时按番序排列。当前遗漏仅作为辅助展示。";
+  document.getElementById("trend").innerHTML=data.slice(-30).map(x=>
+   `<span class="tag">${x.issue}: ${x.num}号 / ${group(x.num)}番</span>`
+  ).join("");
+ }
+}
+function backtest(){
+ if(data.length<32){
+  document.getElementById("result").textContent="至少需要32期数据才能进行30期窗口回测。";
+  return;
+ }
+ let hit=0,total=0,primary=0,second=0,defense=0;
+ for(let i=30;i<data.length;i++){
+  let r=recommend(data.slice(i-30,i));
+  let actual=group(data[i].num);
+  total++;
+  if(r[0].g===actual)primary++;
+  if(r[1].g===actual)second++;
+  if(r[2].g===actual)defense++;
+  if(r.slice(0,3).some(x=>x.g===actual))hit++;
+ }
+ document.getElementById("result").innerHTML=
+ `测试期数：${total}<br>
+ 主推番命中：${primary}次（${(primary/total*100).toFixed(2)}%）<br>
+ 次推番命中：${second}次（${(second/total*100).toFixed(2)}%）<br>
+ 防守番命中：${defense}次（${(defense/total*100).toFixed(2)}%）<br>
+ 三档覆盖命中：${hit}次（${(hit/total*100).toFixed(2)}%）`;
+}
+function exportData(){
+ let text="期号,第一球\n"+data.map(x=>x.issue+","+x.num).join("\n");
+ let a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob(["\ufeff"+text],{type:"text/csv"}));
+ a.download="番摊历史数据.csv";a.click();
+}
+function clearData(){
+ if(confirm("确定清空所有历史数据？")){
+  data=[];save();
+ }
+}
+function demo(){
+ data=Array.from({length:100},(_,i)=>({
+  issue:String(588200+i),
+  num:((i*7+3)%20)+1
+ }));
+ save();
+ document.getElementById("status").textContent="已载入100期演示数据，请勿当作真实开奖数据。";
+}
+render();
+</script>
+</body>
+</html>
